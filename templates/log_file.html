@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+
+{% block title %}Log File - {{ job_id }}{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h1><i class="fas fa-file-alt"></i> Log File: {{ filename }}</h1>
+            <div>
+                <button class="btn btn-outline-secondary btn-sm" onclick="toggleWrap()" id="wrapBtn">
+                    <i class="fas fa-align-left"></i> Toggle Wrap
+                </button>
+                <a href="{{ url_for('view_logs', job_id=job_id) }}" class="btn btn-secondary">
+                    <i class="fas fa-arrow-left"></i> Back to Logs
+                </a>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5><i class="fas fa-info-circle"></i> File Information</h5>
+                <div>
+                    <small class="text-muted">Job: {{ job_id }}</small>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <p><strong>Filename:</strong> {{ filename }}</p>
+                        <p><strong>Job Status:</strong> 
+                            {% if job.status == 'running' %}
+                                <span class="badge bg-warning"><i class="fas fa-spinner fa-spin"></i> Running</span>
+                            {% elif job.status == 'success' %}
+                                <span class="badge bg-success"><i class="fas fa-check"></i> Success</span>
+                            {% elif job.status == 'error' %}
+                                <span class="badge bg-danger"><i class="fas fa-exclamation-triangle"></i> Error</span>
+                            {% else %}
+                                <span class="badge bg-info"><i class="fas fa-clock"></i> Idle</span>
+                            {% endif %}
+                        </p>
+                    </div>
+                    <div class="col-md-6">
+                        <p><strong>Module:</strong> {{ job.module or 'N/A' }}</p>
+                        <p><strong>Config:</strong> {{ job.config_file or 'N/A' }}</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="mt-4">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5><i class="fas fa-terminal"></i> Log Content</h5>
+                    <div>
+                        <button class="btn btn-outline-primary btn-sm" onclick="downloadLog()">
+                            <i class="fas fa-download"></i> Download
+                        </button>
+                        <button class="btn btn-outline-secondary btn-sm" onclick="refreshLog()">
+                            <i class="fas fa-sync-alt"></i> Refresh
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body p-0">
+                    <pre class="log-content bg-dark text-light p-3 m-0" id="logContent" style="min-height: 500px; max-height: 80vh; overflow: auto; white-space: pre-wrap;"><code>{{ log_content }}</code></pre>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let wrapEnabled = true;
+
+function toggleWrap() {
+    const logContent = document.getElementById('logContent');
+    wrapEnabled = !wrapEnabled;
+    
+    if (wrapEnabled) {
+        logContent.style.whiteSpace = 'pre-wrap';
+        document.getElementById('wrapBtn').innerHTML = '<i class="fas fa-align-left"></i> Toggle Wrap';
+    } else {
+        logContent.style.whiteSpace = 'pre';
+        document.getElementById('wrapBtn').innerHTML = '<i class="fas fa-align-justify"></i> Toggle Wrap';
+    }
+}
+
+function downloadLog() {
+    const logContent = document.getElementById('logContent').textContent;
+    const blob = new Blob([logContent], { type: 'text/plain' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.style.display = 'none';
+    a.href = url;
+    a.download = '{{ filename }}';
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+}
+
+function refreshLog() {
+    location.reload();
+}
+
+// Auto-scroll to bottom if job is running
+{% if job.status == 'running' %}
+document.addEventListener('DOMContentLoaded', function() {
+    const logContent = document.getElementById('logContent');
+    logContent.scrollTop = logContent.scrollHeight;
+    
+    // Auto-refresh every 10 seconds if job is running
+    setTimeout(function() {
+        location.reload();
+    }, 10000);
+});
+{% endif %}
+</script>
+{% endblock %}

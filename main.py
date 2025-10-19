@@ -3,6 +3,7 @@ import sys
 import importlib
 import json
 import traceback
+import logging
 from datetime import datetime
 from typing import Dict, Any, List, Optional
 from flask import Flask, render_template, request, jsonify, redirect, url_for, flash
@@ -10,6 +11,8 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 from apscheduler.triggers.cron import CronTrigger
 import atexit
+from contextlib import redirect_stdout, redirect_stderr
+from io import StringIO
 
 app = Flask(__name__)
 app.secret_key = 'your-secret-key-change-this'  # Change this in production
@@ -21,7 +24,99 @@ atexit.register(lambda: scheduler.shutdown())
 
 # Job registry to store job configurations
 JOBS_CONFIG_FILE = 'jobs_config.json'
+LOG_DIRECTORY = 'log'
 jobs_registry: Dict[str, Dict[str, Any]] = {}
+
+class LogManager:
+    @staticmethod
+    def ensure_log_directory():
+        """Ensure log directory exists."""
+        os.makedirs(LOG_DIRECTORY, exist_ok=True)
+    
+    @staticmethod
+    def get_log_file_path(job_id: str, timestamp: str = None) -> str:
+        """Get the path for a job's log file."""
+        LogManager.ensure_log_directory()
+        if timestamp is None:
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        return os.path.join(LOG_DIRECTORY, f"{job_id}_{timestamp}.log")
+    
+    @staticmethod
+    def get_latest_log_file(job_id: str) -> Optional[str]:
+        """Get the path to the most recent log file for a job."""
+        LogManager.ensure_log_directory()
+        log_files = [f for f in os.listdir(LOG_DIRECTORY) 
+                    if f.startswith(f"{job_id}_") and f.endswith('.log')]
+        if log_files:
+            log_files.sort(reverse=True)  # Most recent first
+            return os.path.join(LOG_DIRECTORY, log_files[0])
+        return None
+    
+    @staticmethod
+    def get_log_files_for_job(job_id: str, limit: int = 10) -> List[Dict[str, Any]]:
+        """Get a list of log files for a specific job."""
+        LogManager.ensure_log_directory()
+        log_files = [f for f in os.listdir(LOG_DIRECTORY) 
+                    if f.startswith(f"{job_id}_") and f.endswith('.log')]
+        log_files.sort(reverse=True)  # Most recent first
+        
+        result = []
+        for log_file in log_files[:limit]:
+            file_path = os.path.join(LOG_DIRECTORY, log_file)
+            try:
+                stat_info = os.stat(file_path)
+                # Extract timestamp from filename
+                timestamp_str = log_file.replace(f"{job_id}_", "").replace(".log", "")
+                try:
+                    timestamp = datetime.strptime(timestamp_str, '%Y%m%d_%H%M%S')
+                except ValueError:
+                    timestamp = datetime.fromtimestamp(stat_info.st_mtime)
+                
+                result.append({
+                    'filename': log_file,
+                    'path': file_path,
+                    'size': stat_info.st_size,
+                    'timestamp': timestamp,
+                    'timestamp_str': timestamp.strftime('%Y-%m-%d %H:%M:%S')
+                })
+            except OSError:
+                continue
+        
+        return result
+    
+    @staticmethod
+    def read_log_file(file_path: str, max_lines: int = 1000) -> str:
+        """Read a log file with optional line limit."""
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                lines = f.readlines()
+                if len(lines) > max_lines:
+                    lines = lines[-max_lines:]  # Get last N lines
+                return ''.join(lines)
+        except Exception as e:
+            return f"Error reading log file: {e}"
+    
+    @staticmethod
+    def cleanup_old_logs(job_id: str = None, keep_count: int = 5):
+        """Clean up old log files, keeping only the most recent ones."""
+        LogManager.ensure_log_directory()
+        
+        if job_id:
+            # Clean logs for specific job
+            log_files = [f for f in os.listdir(LOG_DIRECTORY) 
+                        if f.startswith(f"{job_id}_") and f.endswith('.log')]
+        else:
+            # Clean all log files
+            log_files = [f for f in os.listdir(LOG_DIRECTORY) if f.endswith('.log')]
+        
+        log_files.sort(reverse=True)  # Most recent first
+        
+        # Remove old files
+        for log_file in log_files[keep_count:]:
+            try:
+                os.remove(os.path.join(LOG_DIRECTORY, log_file))
+            except OSError:
+                pass
 
 class JobManager:
     def __init__(self):
@@ -93,76 +188,148 @@ class JobManager:
             print(f"Error scheduling job {job_id}: {e}")
     
     def _execute_job(self, job_id: str):
-        """Execute a job module."""
+        """Execute a job module with persistent logging."""
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        log_file_path = LogManager.get_log_file_path(job_id, timestamp)
+        
+        # Create a logger for this job execution
+        job_logger = logging.getLogger(f"job_{job_id}_{timestamp}")
+        job_logger.setLevel(logging.INFO)
+        
+        # Remove any existing handlers
+        for handler in job_logger.handlers[:]:
+            job_logger.removeHandler(handler)
+        
+        # Create file handler
+        file_handler = logging.FileHandler(log_file_path, encoding='utf-8')
+        file_handler.setLevel(logging.INFO)
+        
+        # Create formatter
+        formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+        file_handler.setFormatter(formatter)
+        job_logger.addHandler(file_handler)
+        
         try:
             config = jobs_registry.get(job_id)
             if not config:
-                print(f"Job {job_id} not found in registry")
+                error_msg = f"Job {job_id} not found in registry"
+                job_logger.error(error_msg)
+                print(error_msg)
                 return
             
             module_name = config['module']
             config_file = config.get('config_file')
             
+            job_logger.info(f"Starting job execution: {job_id}")
+            job_logger.info(f"Module: {module_name}")
+            job_logger.info(f"Config file: {config_file}")
+            
             # Update last run time
             jobs_registry[job_id]['last_run'] = datetime.now().isoformat()
             jobs_registry[job_id]['status'] = 'running'
+            jobs_registry[job_id]['last_log_file'] = log_file_path
             self.save_jobs_config()
             
             # Add the module directory to Python path temporarily
             module_path = os.path.abspath(module_name)
             if module_path not in sys.path:
                 sys.path.insert(0, module_path)
+                job_logger.info(f"Added module path: {module_path}")
             
             try:
                 # Import and run the module
                 run_module_path = f"{module_name}.run"
                 if run_module_path in sys.modules:
                     importlib.reload(sys.modules[run_module_path])
+                    job_logger.info(f"Reloaded module: {run_module_path}")
                 
                 module = importlib.import_module(run_module_path)
+                job_logger.info(f"Imported module: {run_module_path}")
                 
-                # Try different execution strategies based on module structure
-                if hasattr(module, 'main') and config_file:
-                    # Execute with config file as command line argument
-                    original_argv = sys.argv
-                    sys.argv = ['run.py', config_file]
-                    try:
-                        module.main()
-                    finally:
-                        sys.argv = original_argv
-                        
-                elif hasattr(module, 'migrate') and config_file:
-                    # For email_move type modules, load config directly
-                    if hasattr(module, 'load_config'):
-                        cfg = module.load_config(config_file)
-                        module.migrate(cfg)
+                # Capture stdout and stderr during execution
+                stdout_capture = StringIO()
+                stderr_capture = StringIO()
+                
+                with redirect_stdout(stdout_capture), redirect_stderr(stderr_capture):
+                    # Try different execution strategies based on module structure
+                    if hasattr(module, 'main') and config_file:
+                        job_logger.info("Executing module.main() with config file")
+                        # Execute with config file as command line argument
+                        original_argv = sys.argv
+                        sys.argv = ['run.py', config_file]
+                        try:
+                            module.main()
+                        finally:
+                            sys.argv = original_argv
+                            
+                    elif hasattr(module, 'migrate') and config_file:
+                        job_logger.info("Executing module.migrate() with config")
+                        # For email_move type modules, load config directly
+                        if hasattr(module, 'load_config'):
+                            cfg = module.load_config(config_file)
+                            module.migrate(cfg)
+                        else:
+                            # Try to import yaml and load config manually
+                            import yaml
+                            with open(config_file, 'r') as f:
+                                cfg = yaml.safe_load(f)
+                            module.migrate(cfg)
+                            
                     else:
-                        # Try to import yaml and load config manually
-                        import yaml
-                        with open(config_file, 'r') as f:
-                            cfg = yaml.safe_load(f)
-                        module.migrate(cfg)
-                        
-                else:
-                    print(f"Module {module_name} doesn't have expected entry points (main or migrate)")
-                    return
+                        error_msg = f"Module {module_name} doesn't have expected entry points (main or migrate)"
+                        job_logger.error(error_msg)
+                        print(error_msg)
+                        return
+                
+                # Log captured output
+                stdout_content = stdout_capture.getvalue()
+                stderr_content = stderr_capture.getvalue()
+                
+                if stdout_content:
+                    job_logger.info("STDOUT OUTPUT:")
+                    for line in stdout_content.strip().split('\n'):
+                        if line.strip():
+                            job_logger.info(f"  {line}")
+                
+                if stderr_content:
+                    job_logger.warning("STDERR OUTPUT:")
+                    for line in stderr_content.strip().split('\n'):
+                        if line.strip():
+                            job_logger.warning(f"  {line}")
                     
             finally:
                 # Remove module path from sys.path
                 if module_path in sys.path:
                     sys.path.remove(module_path)
+                    job_logger.info(f"Removed module path: {module_path}")
             
             # Update success status
             jobs_registry[job_id]['status'] = 'success'
             jobs_registry[job_id]['last_success'] = datetime.now().isoformat()
+            job_logger.info("Job completed successfully")
             
         except Exception as e:
-            print(f"Error executing job {job_id}: {e}")
+            error_msg = f"Error executing job {job_id}: {e}"
+            job_logger.error(error_msg)
+            job_logger.error("Exception traceback:")
+            for line in traceback.format_exc().split('\n'):
+                if line.strip():
+                    job_logger.error(f"  {line}")
+            
+            print(error_msg)
             traceback.print_exc()
             jobs_registry[job_id]['status'] = 'error'
             jobs_registry[job_id]['last_error'] = str(e)
         finally:
+            # Clean up logger handlers
+            for handler in job_logger.handlers[:]:
+                handler.close()
+                job_logger.removeHandler(handler)
+            
             self.save_jobs_config()
+            
+            # Clean up old log files (keep last 5 per job)
+            LogManager.cleanup_old_logs(job_id, keep_count=5)
     
     def add_job(self, job_id: str, module: str, config_file: str, 
                 interval_type: str = 'minutes', interval_value: int = 60,
@@ -303,9 +470,54 @@ def api_jobs():
 def view_logs(job_id):
     """View logs for a specific job."""
     job = jobs_registry.get(job_id, {})
-    return render_template('logs.html', job_id=job_id, job=job)
+    log_files = LogManager.get_log_files_for_job(job_id)
+    
+    # Get the latest log content if available
+    latest_log_content = ""
+    if log_files:
+        latest_log_content = LogManager.read_log_file(log_files[0]['path'])
+    
+    return render_template('logs.html', 
+                         job_id=job_id, 
+                         job=job, 
+                         log_files=log_files,
+                         latest_log_content=latest_log_content)
+
+@app.route('/logs/<job_id>/<filename>')
+def view_log_file(job_id, filename):
+    """View a specific log file."""
+    log_file_path = os.path.join(LOG_DIRECTORY, filename)
+    
+    # Security check - ensure filename belongs to the job
+    if not filename.startswith(f"{job_id}_") or not filename.endswith('.log'):
+        flash('Invalid log file requested', 'error')
+        return redirect(url_for('view_logs', job_id=job_id))
+    
+    if not os.path.exists(log_file_path):
+        flash('Log file not found', 'error')
+        return redirect(url_for('view_logs', job_id=job_id))
+    
+    log_content = LogManager.read_log_file(log_file_path)
+    job = jobs_registry.get(job_id, {})
+    
+    return render_template('log_file.html',
+                         job_id=job_id,
+                         job=job,
+                         filename=filename,
+                         log_content=log_content)
+
+@app.route('/api/logs/<job_id>/cleanup', methods=['POST'])
+def cleanup_logs(job_id):
+    """Clean up old log files for a job."""
+    try:
+        keep_count = int(request.json.get('keep_count', 5))
+        LogManager.cleanup_old_logs(job_id, keep_count)
+        return jsonify({'success': True, 'message': f'Cleaned up logs for {job_id}'})
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
 
 if __name__ == '__main__':
-    # Create templates directory if it doesn't exist
+    # Create required directories if they don't exist
     os.makedirs('templates', exist_ok=True)
+    LogManager.ensure_log_directory()
     app.run(debug=True, host='0.0.0.0', port=8000)

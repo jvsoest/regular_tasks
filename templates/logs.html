@@ -7,9 +7,14 @@
     <div class="col-12">
         <div class="d-flex justify-content-between align-items-center mb-4">
             <h1><i class="fas fa-file-alt"></i> Job Logs: {{ job_id }}</h1>
-            <a href="{{ url_for('index') }}" class="btn btn-secondary">
-                <i class="fas fa-arrow-left"></i> Back to Dashboard
-            </a>
+            <div>
+                <button class="btn btn-outline-danger btn-sm" onclick="cleanupLogs()" title="Clean up old logs">
+                    <i class="fas fa-trash"></i> Cleanup Old Logs
+                </button>
+                <a href="{{ url_for('index') }}" class="btn btn-secondary">
+                    <i class="fas fa-arrow-left"></i> Back to Dashboard
+                </a>
+            </div>
         </div>
 
         <div class="card">
@@ -23,19 +28,19 @@
                         <p><strong>Config File:</strong> {{ job.config_file }}</p>
                         <p><strong>Status:</strong> 
                             {% if job.status == 'running' %}
-                                <span class="badge bg-warning">Running</span>
+                                <span class="badge bg-warning"><i class="fas fa-spinner fa-spin"></i> Running</span>
                             {% elif job.status == 'success' %}
-                                <span class="badge bg-success">Success</span>
+                                <span class="badge bg-success"><i class="fas fa-check"></i> Success</span>
                             {% elif job.status == 'error' %}
-                                <span class="badge bg-danger">Error</span>
+                                <span class="badge bg-danger"><i class="fas fa-exclamation-triangle"></i> Error</span>
                             {% else %}
-                                <span class="badge bg-info">Idle</span>
+                                <span class="badge bg-info"><i class="fas fa-clock"></i> Idle</span>
                             {% endif %}
                         </p>
                     </div>
                     <div class="col-md-6">
-                        <p><strong>Last Run:</strong> {{ job.last_run or 'Never' }}</p>
-                        <p><strong>Last Success:</strong> {{ job.last_success or 'Never' }}</p>
+                        <p><strong>Last Run:</strong> {{ job.last_run[:19] if job.last_run else 'Never' }}</p>
+                        <p><strong>Last Success:</strong> {{ job.last_success[:19] if job.last_success else 'Never' }}</p>
                         {% if job.last_error %}
                         <p><strong>Last Error:</strong> <span class="text-danger">{{ job.last_error }}</span></p>
                         {% endif %}
@@ -44,13 +49,102 @@
             </div>
         </div>
 
+        {% if log_files %}
+        <div class="mt-4">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5><i class="fas fa-list"></i> Log Files ({{ log_files|length }})</h5>
+                    <small class="text-muted">Most recent first</small>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Timestamp</th>
+                                    <th>Size</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for log_file in log_files %}
+                                <tr>
+                                    <td>
+                                        <i class="fas fa-file-alt text-info me-2"></i>
+                                        {{ log_file.timestamp_str }}
+                                    </td>
+                                    <td>
+                                        {% if log_file.size < 1024 %}
+                                            {{ log_file.size }} B
+                                        {% elif log_file.size < 1048576 %}
+                                            {{ "%.1f"|format(log_file.size / 1024) }} KB
+                                        {% else %}
+                                            {{ "%.1f"|format(log_file.size / 1048576) }} MB
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <a href="{{ url_for('view_log_file', job_id=job_id, filename=log_file.filename) }}" 
+                                           class="btn btn-outline-primary btn-sm">
+                                            <i class="fas fa-eye"></i> View
+                                        </a>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {% if latest_log_content %}
+        <div class="mt-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5><i class="fas fa-terminal"></i> Latest Execution Log</h5>
+                </div>
+                <div class="card-body">
+                    <pre class="log-content bg-dark text-light p-3 rounded" style="max-height: 400px; overflow-y: auto;"><code>{{ latest_log_content }}</code></pre>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+        {% else %}
         <div class="mt-4">
             <div class="alert alert-info">
                 <i class="fas fa-info-circle"></i>
-                <strong>Note:</strong> Detailed logs are currently stored in the application console. 
-                Future versions will include persistent logging to files.
+                <strong>No log files found.</strong> Log files will be created when this job runs.
             </div>
         </div>
+        {% endif %}
     </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function cleanupLogs() {
+    if (confirm('Are you sure you want to clean up old log files? This will keep only the 5 most recent logs.')) {
+        fetch(`/api/logs/{{ job_id }}/cleanup`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({keep_count: 5})
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert('Log cleanup completed successfully');
+                location.reload();
+            } else {
+                alert('Error cleaning up logs: ' + data.message);
+            }
+        })
+        .catch(error => {
+            alert('Error cleaning up logs: ' + error);
+        });
+    }
+}
+</script>
 {% endblock %}
