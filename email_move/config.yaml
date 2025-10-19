@@ -1,0 +1,29 @@
+source:
+  host: imap.transip.email
+  port: 993           # omit to use 993 for SSL or 143 otherwise
+  username: info@johanvansoest.nl
+  password: your_password_here
+  ssl: true
+  mailbox: INBOX
+
+dest:
+  host: imap.gmail.com
+  port: 993
+  username: johanvansoest@gmail.com
+  password: your_password_here
+  ssl: true
+  mailbox: INBOX
+
+options:
+  search_query: ALL
+  batch_size: 200
+  dedupe_by: message_id
+  create_dest_mailbox: true
+  idle_delay_sec: 0
+
+  # Move + safety
+  delete_after_copy: true        # perform a MOVE
+  safety_mode: true              # retry + verify before deletion
+  verify_strategy: message_id    # or 'none' (not recommended if deleting)
+  max_retries: 3
+  retry_backoff_sec: 2.0
