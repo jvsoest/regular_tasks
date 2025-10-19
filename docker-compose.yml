@@ -1,0 +1,35 @@
+version: '3.8'
+
+services:
+  regular-tasks:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./jobs_config.json:/app/jobs_config.json
+      # Mount module directories (add as needed)
+      - ./email_move:/app/email_move
+    environment:
+      - FLASK_ENV=production
+      - TZ=UTC
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Optional: Add a reverse proxy for production
+  # nginx:
+  #   image: nginx:alpine
+  #   ports:
+  #     - "80:80"
+  #     - "443:443"
+  #   volumes:
+  #     - ./nginx.conf:/etc/nginx/nginx.conf
+  #   depends_on:
+  #     - regular-tasks
+  #   restart: unless-stopped
