@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+
+{% block title %}Logs - {{ job_id }}{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h1><i class="fas fa-file-alt"></i> Job Logs: {{ job_id }}</h1>
+            <a href="{{ url_for('index') }}" class="btn btn-secondary">
+                <i class="fas fa-arrow-left"></i> Back to Dashboard
+            </a>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h5>Job Information</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <p><strong>Module:</strong> {{ job.module }}</p>
+                        <p><strong>Config File:</strong> {{ job.config_file }}</p>
+                        <p><strong>Status:</strong> 
+                            {% if job.status == 'running' %}
+                                <span class="badge bg-warning">Running</span>
+                            {% elif job.status == 'success' %}
+                                <span class="badge bg-success">Success</span>
+                            {% elif job.status == 'error' %}
+                                <span class="badge bg-danger">Error</span>
+                            {% else %}
+                                <span class="badge bg-info">Idle</span>
+                            {% endif %}
+                        </p>
+                    </div>
+                    <div class="col-md-6">
+                        <p><strong>Last Run:</strong> {{ job.last_run or 'Never' }}</p>
+                        <p><strong>Last Success:</strong> {{ job.last_success or 'Never' }}</p>
+                        {% if job.last_error %}
+                        <p><strong>Last Error:</strong> <span class="text-danger">{{ job.last_error }}</span></p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="mt-4">
+            <div class="alert alert-info">
+                <i class="fas fa-info-circle"></i>
+                <strong>Note:</strong> Detailed logs are currently stored in the application console. 
+                Future versions will include persistent logging to files.
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

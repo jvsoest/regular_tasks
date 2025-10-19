@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+
+{% block title %}Add Job - Job Scheduler{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                <h4><i class="fas fa-plus"></i> Add New Job</h4>
+            </div>
+            <div class="card-body">
+                <form method="POST">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="job_id" class="form-label">Job ID *</label>
+                                <input type="text" class="form-control" id="job_id" name="job_id" required
+                                       placeholder="e.g., email_move_daily">
+                                <div class="form-text">Unique identifier for this job</div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="module" class="form-label">Module *</label>
+                                <select class="form-select" id="module" name="module" required>
+                                    <option value="">Select a module...</option>
+                                    {% for module in modules %}
+                                    <option value="{{ module }}">{{ module }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="config_file" class="form-label">Config File Path *</label>
+                        <input type="text" class="form-control" id="config_file" name="config_file" required
+                               placeholder="e.g., email_move/config.yaml">
+                        <div class="form-text">Path to the configuration file for this job</div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-4">
+                            <div class="mb-3">
+                                <label for="interval_type" class="form-label">Schedule Type</label>
+                                <select class="form-select" id="interval_type" name="interval_type" onchange="toggleScheduleFields()">
+                                    <option value="minutes">Minutes</option>
+                                    <option value="hours">Hours</option>
+                                    <option value="days">Days</option>
+                                    <option value="weeks">Weeks</option>
+                                    <option value="cron">Cron Expression</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="col-md-4" id="interval_value_field">
+                            <div class="mb-3">
+                                <label for="interval_value" class="form-label">Interval</label>
+                                <input type="number" class="form-control" id="interval_value" name="interval_value" 
+                                       value="60" min="1">
+                            </div>
+                        </div>
+                        <div class="col-md-8" id="cron_field" style="display: none;">
+                            <div class="mb-3">
+                                <label for="cron_expression" class="form-label">Cron Expression</label>
+                                <input type="text" class="form-control" id="cron_expression" name="cron_expression"
+                                       placeholder="0 */6 * * *">
+                                <div class="form-text">Use standard cron format (minute hour day month weekday)</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="enabled" name="enabled" checked>
+                            <label class="form-check-label" for="enabled">
+                                Enable job immediately
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="d-flex justify-content-between">
+                        <a href="{{ url_for('index') }}" class="btn btn-secondary">
+                            <i class="fas fa-arrow-left"></i> Back to Dashboard
+                        </a>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-save"></i> Create Job
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function toggleScheduleFields() {
+    const intervalType = document.getElementById('interval_type').value;
+    const intervalField = document.getElementById('interval_value_field');
+    const cronField = document.getElementById('cron_field');
+    
+    if (intervalType === 'cron') {
+        intervalField.style.display = 'none';
+        cronField.style.display = 'block';
+    } else {
+        intervalField.style.display = 'block';
+        cronField.style.display = 'none';
+    }
+}
+</script>
+{% endblock %}
