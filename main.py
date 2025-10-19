@@ -108,27 +108,49 @@ class JobManager:
             jobs_registry[job_id]['status'] = 'running'
             self.save_jobs_config()
             
-            # Import and run the module
-            if module_name in sys.modules:
-                importlib.reload(sys.modules[module_name])
+            # Add the module directory to Python path temporarily
+            module_path = os.path.abspath(module_name)
+            if module_path not in sys.path:
+                sys.path.insert(0, module_path)
             
-            module_path = f"{module_name}.run"
-            module = importlib.import_module(module_path)
-            
-            if hasattr(module, 'main') and config_file:
-                # Execute with config file
-                original_argv = sys.argv
-                sys.argv = ['run.py', config_file]
-                module.main()
-                sys.argv = original_argv
-            elif hasattr(module, 'migrate') and config_file:
-                # For email_move type modules
-                from . import load_config
-                cfg = load_config(config_file)
-                module.migrate(cfg)
-            else:
-                print(f"Module {module_name} doesn't have expected entry points")
-                return
+            try:
+                # Import and run the module
+                run_module_path = f"{module_name}.run"
+                if run_module_path in sys.modules:
+                    importlib.reload(sys.modules[run_module_path])
+                
+                module = importlib.import_module(run_module_path)
+                
+                # Try different execution strategies based on module structure
+                if hasattr(module, 'main') and config_file:
+                    # Execute with config file as command line argument
+                    original_argv = sys.argv
+                    sys.argv = ['run.py', config_file]
+                    try:
+                        module.main()
+                    finally:
+                        sys.argv = original_argv
+                        
+                elif hasattr(module, 'migrate') and config_file:
+                    # For email_move type modules, load config directly
+                    if hasattr(module, 'load_config'):
+                        cfg = module.load_config(config_file)
+                        module.migrate(cfg)
+                    else:
+                        # Try to import yaml and load config manually
+                        import yaml
+                        with open(config_file, 'r') as f:
+                            cfg = yaml.safe_load(f)
+                        module.migrate(cfg)
+                        
+                else:
+                    print(f"Module {module_name} doesn't have expected entry points (main or migrate)")
+                    return
+                    
+            finally:
+                # Remove module path from sys.path
+                if module_path in sys.path:
+                    sys.path.remove(module_path)
             
             # Update success status
             jobs_registry[job_id]['status'] = 'success'
