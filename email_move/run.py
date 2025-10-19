@@ -208,7 +208,7 @@ def verify_on_destination(
 
 def filter_flags_for_unread(flags: Tuple[bytes, ...]) -> Tuple[bytes, ...]:
     """
-    Remove the \Seen flag to ensure messages are marked as unread in destination.
+    Remove the \\Seen flag to ensure messages are marked as unread in destination.
     """
     return tuple(flag for flag in flags if flag.lower() != b'\\seen')
 
@@ -357,14 +357,10 @@ def migrate(cfg: Dict[str, Any]) -> None:
     dst.logout()
 
 
-def main():
+if __name__ == "__main__":
     if len(sys.argv) != 2:
         print("Usage: python imap_inbox_migrator.py /path/to/config.yaml")
         sys.exit(1)
     cfg_path = sys.argv[1]
     cfg = load_config(cfg_path)
     migrate(cfg)
-
-
-if __name__ == "__main__":
-    main()
