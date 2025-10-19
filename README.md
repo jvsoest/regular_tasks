@@ -49,6 +49,27 @@ IMAP email migration tool with advanced features:
 
 ### Docker Deployment
 
+### Using Pre-built Images
+
+The project automatically builds Docker images via GitHub Actions and publishes them to GitHub Container Registry.
+
+1. **Pull the latest image**
+   ```bash
+   docker pull ghcr.io/OWNER/REPOSITORY:latest
+   ```
+
+2. **Run the container**
+   ```bash
+   docker run -d \
+     --name regular-tasks \
+     -p 8000:8000 \
+     -v $(pwd)/data:/app/data \
+     -v $(pwd)/logs:/app/logs \
+     ghcr.io/jvsoest/regular_tasks:latest
+   ```
+
+### Building Locally
+
 1. **Build the Docker image**
    ```bash
    docker build -t regular-tasks .
@@ -64,9 +85,6 @@ IMAP email migration tool with advanced features:
      regular-tasks
    ```
 
-3. **Access the application**
-   Open your browser and navigate to `http://localhost:8000`
-
 ### Docker Compose (Recommended)
 
 Create a `docker-compose.yml` file:
@@ -76,7 +94,7 @@ version: '3.8'
 
 services:
   regular-tasks:
-    build: .
+    image: ghcr.io/OWNER/REPOSITORY:latest  # or build: . for local builds
     ports:
       - "8000:8000"
     volumes:
