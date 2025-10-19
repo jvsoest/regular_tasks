@@ -25,6 +25,12 @@ atexit.register(lambda: scheduler.shutdown())
 # Job registry to store job configurations
 JOBS_CONFIG_FILE = 'jobs_config.json'
 LOG_DIRECTORY = 'log'
+
+# Log rotation configuration from environment variables
+LOG_ROTATION_DAYS = int(os.getenv('LOG_ROTATION_DAYS', '7'))  # Keep logs for 7 days by default
+LOG_ROTATION_COUNT = int(os.getenv('LOG_ROTATION_COUNT', '10'))  # Keep max 10 files per job by default
+LOG_ROTATION_ENABLED = os.getenv('LOG_ROTATION_ENABLED', 'true').lower() == 'true'
+
 jobs_registry: Dict[str, Dict[str, Any]] = {}
 
 class LogManager:
@@ -117,6 +123,157 @@ class LogManager:
                 os.remove(os.path.join(LOG_DIRECTORY, log_file))
             except OSError:
                 pass
+
+    @staticmethod
+    def rotate_logs_by_age(max_days: int = None):
+        """Remove log files older than specified days."""
+        if max_days is None:
+            max_days = LOG_ROTATION_DAYS
+            
+        if max_days <= 0:
+            return  # Rotation disabled
+            
+        LogManager.ensure_log_directory()
+        
+        cutoff_time = datetime.now().timestamp() - (max_days * 24 * 60 * 60)
+        removed_count = 0
+        
+        try:
+            for filename in os.listdir(LOG_DIRECTORY):
+                if not filename.endswith('.log'):
+                    continue
+                    
+                file_path = os.path.join(LOG_DIRECTORY, filename)
+                try:
+                    if os.path.getmtime(file_path) < cutoff_time:
+                        os.remove(file_path)
+                        removed_count += 1
+                except OSError:
+                    continue
+                    
+        except OSError:
+            pass
+            
+        return removed_count
+
+    @staticmethod
+    def rotate_logs_by_count(job_id: str = None, max_count: int = None):
+        """Keep only the most recent N log files per job."""
+        if max_count is None:
+            max_count = LOG_ROTATION_COUNT
+            
+        if max_count <= 0:
+            return  # Rotation disabled
+            
+        LogManager.ensure_log_directory()
+        removed_count = 0
+        
+        if job_id:
+            # Rotate logs for specific job
+            jobs_to_rotate = [job_id]
+        else:
+            # Find all unique job IDs from log files
+            jobs_to_rotate = set()
+            try:
+                for filename in os.listdir(LOG_DIRECTORY):
+                    if filename.endswith('.log') and '_' in filename:
+                        job_part = filename.split('_')[0]
+                        if job_part:
+                            jobs_to_rotate.add(job_part)
+            except OSError:
+                return 0
+                
+        for job in jobs_to_rotate:
+            try:
+                job_logs = []
+                for filename in os.listdir(LOG_DIRECTORY):
+                    if filename.startswith(f"{job}_") and filename.endswith('.log'):
+                        file_path = os.path.join(LOG_DIRECTORY, filename)
+                        try:
+                            mtime = os.path.getmtime(file_path)
+                            job_logs.append((filename, file_path, mtime))
+                        except OSError:
+                            continue
+                
+                # Sort by modification time (newest first)
+                job_logs.sort(key=lambda x: x[2], reverse=True)
+                
+                # Remove files beyond max_count
+                for filename, file_path, _ in job_logs[max_count:]:
+                    try:
+                        os.remove(file_path)
+                        removed_count += 1
+                    except OSError:
+                        continue
+                        
+            except OSError:
+                continue
+                
+        return removed_count
+
+    @staticmethod
+    def perform_log_rotation(job_id: str = None):
+        """Perform complete log rotation based on configuration."""
+        if not LOG_ROTATION_ENABLED:
+            return {'age_removed': 0, 'count_removed': 0}
+            
+        results = {}
+        
+        # Age-based rotation (applies to all logs)
+        age_removed = LogManager.rotate_logs_by_age(LOG_ROTATION_DAYS)
+        results['age_removed'] = age_removed
+        
+        # Count-based rotation (per job or all jobs)
+        count_removed = LogManager.rotate_logs_by_count(job_id, LOG_ROTATION_COUNT)
+        results['count_removed'] = count_removed
+        
+        return results
+
+    @staticmethod
+    def get_rotation_info():
+        """Get current rotation configuration and statistics."""
+        LogManager.ensure_log_directory()
+        
+        # Count total log files
+        total_files = 0
+        total_size = 0
+        oldest_file = None
+        newest_file = None
+        
+        try:
+            for filename in os.listdir(LOG_DIRECTORY):
+                if filename.endswith('.log'):
+                    file_path = os.path.join(LOG_DIRECTORY, filename)
+                    try:
+                        stat_info = os.stat(file_path)
+                        total_files += 1
+                        total_size += stat_info.st_size
+                        
+                        mtime = stat_info.st_mtime
+                        if oldest_file is None or mtime < oldest_file[1]:
+                            oldest_file = (filename, mtime)
+                        if newest_file is None or mtime > newest_file[1]:
+                            newest_file = (filename, mtime)
+                    except OSError:
+                        continue
+        except OSError:
+            pass
+            
+        return {
+            'enabled': LOG_ROTATION_ENABLED,
+            'rotation_days': LOG_ROTATION_DAYS,
+            'rotation_count': LOG_ROTATION_COUNT,
+            'total_files': total_files,
+            'total_size_mb': round(total_size / (1024 * 1024), 2),
+            'oldest_file': {
+                'name': oldest_file[0] if oldest_file else None,
+                'age_days': round((datetime.now().timestamp() - oldest_file[1]) / (24 * 60 * 60), 1) if oldest_file else None
+            } if oldest_file else None,
+            'newest_file': {
+                'name': newest_file[0] if newest_file else None,
+                'age_days': round((datetime.now().timestamp() - newest_file[1]) / (24 * 60 * 60), 1) if newest_file else None
+            } if newest_file else None
+        }
 
 class JobManager:
     def __init__(self):
@@ -328,8 +485,8 @@ class JobManager:
             
             self.save_jobs_config()
             
-            # Clean up old log files (keep last 5 per job)
-            LogManager.cleanup_old_logs(job_id, keep_count=5)
+            # Perform log rotation based on configuration
+            LogManager.perform_log_rotation(job_id)
     
     def add_job(self, job_id: str, module: str, config_file: str, 
                 interval_type: str = 'minutes', interval_value: int = 60,
@@ -516,8 +673,41 @@ def cleanup_logs(job_id):
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)}), 500
 
+@app.route('/admin/logs')
+def admin_logs():
+    """Admin page for log management."""
+    rotation_info = LogManager.get_rotation_info()
+    return render_template('admin_logs.html', rotation_info=rotation_info)
+
+@app.route('/api/logs/rotation/info')
+def rotation_info_api():
+    """Get log rotation information via API."""
+    return jsonify(LogManager.get_rotation_info())
+
+@app.route('/api/logs/rotation/perform', methods=['POST'])
+def perform_rotation():
+    """Manually trigger log rotation."""
+    try:
+        job_id = request.json.get('job_id') if request.is_json else None
+        results = LogManager.perform_log_rotation(job_id)
+        return jsonify({
+            'success': True, 
+            'message': f'Rotation complete: {results["age_removed"]} old files, {results["count_removed"]} excess files removed',
+            'results': results
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
 if __name__ == '__main__':
     # Create required directories if they don't exist
     os.makedirs('templates', exist_ok=True)
     LogManager.ensure_log_directory()
+    
+    # Perform initial log rotation on startup
+    print("Performing initial log rotation...")
+    rotation_results = LogManager.perform_log_rotation()
+    if rotation_results['age_removed'] > 0 or rotation_results['count_removed'] > 0:
+        print(f"Log rotation: removed {rotation_results['age_removed']} old files, "
+              f"{rotation_results['count_removed']} excess files")
+    
     app.run(debug=True, host='0.0.0.0', port=8000)

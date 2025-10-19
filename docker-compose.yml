@@ -7,13 +7,17 @@ services:
       - "8000:8000"
     volumes:
       - ./data:/app/data
-      - ./logs:/app/logs
+      - ./log:/app/log
       - ./jobs_config.json:/app/jobs_config.json
       # Mount module directories (add as needed)
       - ./email_move:/app/email_move
     environment:
       - FLASK_ENV=production
       - TZ=UTC
+      # Log rotation settings (optional)
+      - LOG_ROTATION_ENABLED=true
+      - LOG_ROTATION_DAYS=7
+      - LOG_ROTATION_COUNT=10
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/"]

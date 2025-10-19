@@ -1,0 +1,211 @@
+{% extends "base.html" %}
+
+{% block title %}Log Management - Admin{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h1><i class="fas fa-cogs"></i> Log Management</h1>
+            <div>
+                <button class="btn btn-outline-warning" onclick="performRotation()" title="Manually trigger log rotation">
+                    <i class="fas fa-sync-alt"></i> Rotate Now
+                </button>
+                <a href="{{ url_for('index') }}" class="btn btn-secondary">
+                    <i class="fas fa-arrow-left"></i> Back to Dashboard
+                </a>
+            </div>
+        </div>
+
+        <!-- Configuration Card -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5><i class="fas fa-sliders-h"></i> Rotation Configuration</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6>Current Settings</h6>
+                        <ul class="list-unstyled">
+                            <li><strong>Status:</strong> 
+                                {% if rotation_info.enabled %}
+                                    <span class="badge bg-success"><i class="fas fa-check"></i> Enabled</span>
+                                {% else %}
+                                    <span class="badge bg-danger"><i class="fas fa-times"></i> Disabled</span>
+                                {% endif %}
+                            </li>
+                            <li><strong>Max Age:</strong> {{ rotation_info.rotation_days }} days</li>
+                            <li><strong>Max Files per Job:</strong> {{ rotation_info.rotation_count }} files</li>
+                        </ul>
+                    </div>
+                    <div class="col-md-6">
+                        <h6>Environment Variables</h6>
+                        <small class="text-muted">
+                            <code>LOG_ROTATION_ENABLED={{ "true" if rotation_info.enabled else "false" }}</code><br>
+                            <code>LOG_ROTATION_DAYS={{ rotation_info.rotation_days }}</code><br>
+                            <code>LOG_ROTATION_COUNT={{ rotation_info.rotation_count }}</code>
+                        </small>
+                        <div class="mt-2">
+                            <small class="text-info">
+                                <i class="fas fa-info-circle"></i> 
+                                Restart the application after changing environment variables.
+                            </small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Statistics Card -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5><i class="fas fa-chart-bar"></i> Log Statistics</h5>
+            </div>
+            <div class="card-body">
+                <div class="row text-center">
+                    <div class="col-md-3">
+                        <div class="card bg-light">
+                            <div class="card-body">
+                                <h3 class="text-primary">{{ rotation_info.total_files }}</h3>
+                                <p class="mb-0">Total Log Files</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card bg-light">
+                            <div class="card-body">
+                                <h3 class="text-info">{{ rotation_info.total_size_mb }} MB</h3>
+                                <p class="mb-0">Total Size</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card bg-light">
+                            <div class="card-body">
+                                {% if rotation_info.oldest_file %}
+                                <h3 class="text-warning">{{ rotation_info.oldest_file.age_days }}</h3>
+                                <p class="mb-0">Days (Oldest)</p>
+                                {% else %}
+                                <h3 class="text-muted">-</h3>
+                                <p class="mb-0">No Files</p>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card bg-light">
+                            <div class="card-body">
+                                {% if rotation_info.newest_file %}
+                                <h3 class="text-success">{{ rotation_info.newest_file.age_days }}</h3>
+                                <p class="mb-0">Days (Newest)</p>
+                                {% else %}
+                                <h3 class="text-muted">-</h3>
+                                <p class="mb-0">No Files</p>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- File Details Card -->
+        {% if rotation_info.oldest_file or rotation_info.newest_file %}
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-file-alt"></i> File Details</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    {% if rotation_info.oldest_file %}
+                    <div class="col-md-6">
+                        <h6><i class="fas fa-history"></i> Oldest File</h6>
+                        <p><strong>Name:</strong> <code>{{ rotation_info.oldest_file.name }}</code></p>
+                        <p><strong>Age:</strong> {{ rotation_info.oldest_file.age_days }} days</p>
+                        {% if rotation_info.enabled and rotation_info.oldest_file.age_days > rotation_info.rotation_days %}
+                        <div class="alert alert-warning py-2">
+                            <small><i class="fas fa-exclamation-triangle"></i> This file will be removed on next rotation</small>
+                        </div>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+                    {% if rotation_info.newest_file %}
+                    <div class="col-md-6">
+                        <h6><i class="fas fa-clock"></i> Newest File</h6>
+                        <p><strong>Name:</strong> <code>{{ rotation_info.newest_file.name }}</code></p>
+                        <p><strong>Age:</strong> {{ rotation_info.newest_file.age_days }} days</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Rotation Preview -->
+        {% if rotation_info.enabled %}
+        <div class="mt-4">
+            <div class="alert alert-info">
+                <h6><i class="fas fa-info-circle"></i> Rotation Behavior</h6>
+                <ul class="mb-0">
+                    <li>Files older than <strong>{{ rotation_info.rotation_days }} days</strong> will be automatically deleted</li>
+                    <li>Each job will keep a maximum of <strong>{{ rotation_info.rotation_count }} log files</strong></li>
+                    <li>Rotation runs after each job execution and at application startup</li>
+                    <li>You can manually trigger rotation using the "Rotate Now" button above</li>
+                </ul>
+            </div>
+        </div>
+        {% else %}
+        <div class="mt-4">
+            <div class="alert alert-warning">
+                <h6><i class="fas fa-exclamation-triangle"></i> Log Rotation Disabled</h6>
+                <p class="mb-0">
+                    Set <code>LOG_ROTATION_ENABLED=true</code> environment variable and restart the application to enable automatic log rotation.
+                </p>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function performRotation() {
+    if (confirm('Are you sure you want to manually trigger log rotation? This will remove old files based on your configuration.')) {
+        const button = event.target;
+        const originalText = button.innerHTML;
+        button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Rotating...';
+        button.disabled = true;
+        
+        fetch('/api/logs/rotation/perform', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({})
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert('Log rotation completed successfully:\n' + data.message);
+                location.reload();
+            } else {
+                alert('Error during log rotation: ' + data.message);
+            }
+        })
+        .catch(error => {
+            alert('Error during log rotation: ' + error);
+        })
+        .finally(() => {
+            button.innerHTML = originalText;
+            button.disabled = false;
+        });
+    }
+}
+
+// Auto-refresh statistics every 30 seconds
+setTimeout(() => {
+    location.reload();
+}, 30000);
+</script>
+{% endblock %}

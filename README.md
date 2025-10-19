@@ -232,8 +232,37 @@ regular_tasks/
 ### Logs
 
 - Application logs are printed to console
-- Individual job execution logs are stored in job registry
+- Individual job execution logs are stored persistently in the `/log` directory
 - Access logs via the web interface: `/logs/<job_id>`
+- Automatic log rotation prevents unlimited disk usage
+
+#### Log Rotation
+
+The application includes configurable log rotation to manage disk space:
+
+**Environment Variables:**
+- `LOG_ROTATION_ENABLED` - Enable/disable rotation (default: `true`)
+- `LOG_ROTATION_DAYS` - Keep logs for N days (default: `7`)
+- `LOG_ROTATION_COUNT` - Max files per job (default: `10`)
+
+**Rotation Behavior:**
+- Files older than `LOG_ROTATION_DAYS` are automatically deleted
+- Each job keeps maximum `LOG_ROTATION_COUNT` most recent files  
+- Rotation runs after each job execution and at startup
+- Manual rotation available via admin interface at `/admin/logs`
+
+**Examples:**
+```bash
+# Keep logs for 30 days, max 5 files per job
+export LOG_ROTATION_DAYS=30
+export LOG_ROTATION_COUNT=5
+
+# Disable rotation completely
+export LOG_ROTATION_ENABLED=false
+
+# Run with custom settings
+LOG_ROTATION_DAYS=14 python main.py
+```
 
 ## Development
 
