@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   regular-tasks:
-    build: .
+    image: ghcr.io/jvsoest/regular_tasks:latest
     ports:
       - "8000:8000"
     volumes:
