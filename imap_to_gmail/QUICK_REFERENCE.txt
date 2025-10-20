@@ -1,0 +1,129 @@
+╔═══════════════════════════════════════════════════════════════╗
+║          IMAP to Gmail Import - Quick Reference              ║
+╚═══════════════════════════════════════════════════════════════╝
+
+📦 INSTALLATION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  pip install -r requirements.txt
+
+🔐 GOOGLE OAUTH SETUP
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  1. https://console.cloud.google.com/
+  2. Create/select project
+  3. Enable Gmail API
+  4. Create OAuth2 credentials (Desktop app)
+  5. Download → save as credentials.json
+
+⚙️  CONFIGURATION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  cp config.yaml.template config.yaml
+  nano config.yaml  # Edit with your details
+
+🧪 TEST SETUP
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  python test_setup.py
+
+🚀 RUN IMPORT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  # Interactive (recommended for first time)
+  python quickstart.py
+
+  # Direct
+  python run.py config.yaml
+
+  # As module
+  from imap_to_gmail.run import load_config, migrate
+  config = load_config('config.yaml')
+  migrate(config)
+
+📋 COMMON TASKS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Import all unread:
+    options:
+      search_query: UNSEEN
+      delete_after_import: false
+
+  Move everything:
+    options:
+      search_query: ALL
+      delete_after_import: true
+      safety_mode: true
+
+  Import since date:
+    options:
+      search_query: ["SINCE", "01-Jan-2024"]
+
+  Apply labels:
+    options:
+      gmail_labels: ['Archive', 'Migration']
+
+🔧 SCHEDULER INTEGRATION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  from imap_to_gmail.integration import run_imap_to_gmail_import
+  from apscheduler.triggers.cron import CronTrigger
+  
+  scheduler.add_job(
+      func=run_imap_to_gmail_import,
+      trigger=CronTrigger(hour=2, minute=0),
+      id='imap_to_gmail'
+  )
+
+🔒 SECURITY NOTES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  ⚠️  Keep private:
+      - credentials.json
+      - token.json
+      - config.yaml (has passwords)
+
+  ✓ Already in .gitignore
+
+🐛 TROUBLESHOOTING
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  "Invalid grant"
+    → Delete token.json and re-authenticate
+
+  "Quota exceeded"
+    → Add delays: idle_delay_sec: 1
+    → Reduce batch_size: 50
+
+  Slow deduplication
+    → Set dedupe_by: none (if no duplicates)
+    → Run first import without dedup
+
+  Import failures
+    → Check Gmail API quota in Google Cloud Console
+    → Check message size (25 MB limit)
+    → Verify network connectivity
+
+📚 DOCUMENTATION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  README.md         - Module overview and quick start
+  USAGE.md          - Comprehensive usage guide
+  config.yaml.template - Configuration examples
+  CREATION_SUMMARY.md  - What was created and why
+
+🆚 email_move vs imap_to_gmail
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  email_move:        IMAP → IMAP (any server)
+  imap_to_gmail:     IMAP → Gmail API (better for Gmail)
+
+  Use imap_to_gmail when:
+    ✓ Destination is Gmail/Google Workspace
+    ✓ Want best performance
+    ✓ Need OAuth2 security
+    ✓ Want native label support
+
+  Use email_move when:
+    ✓ Destination is NOT Gmail
+    ✓ Standard IMAP-to-IMAP migration
+
+📞 SUPPORT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  1. Check USAGE.md troubleshooting section
+  2. Run test_setup.py to diagnose issues
+  3. Check application logs
+  4. Review configuration for placeholders
+
+╔═══════════════════════════════════════════════════════════════╗
+║  Ready to import? → python quickstart.py                     ║
+╚═══════════════════════════════════════════════════════════════╝

@@ -7,3 +7,13 @@ log/*.log
 __pycache__/
 *.pyc
 *.pyo
+
+# Google OAuth credentials and tokens
+imap_to_gmail/credentials.json
+imap_to_gmail/token.json
+credentials.json
+token.json
+
+# Sensitive config files with passwords
+email_move/config.yaml
+imap_to_gmail/config.yaml

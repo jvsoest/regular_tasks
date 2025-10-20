@@ -16,13 +16,28 @@ A Flask-based web application for scheduling and managing recurring tasks. This 
 ## Available Modules
 
 ### Email Move (`email_move`)
-IMAP email migration tool with advanced features:
+IMAP-to-IMAP email migration tool with advanced features:
 - Copies/moves emails between IMAP mailboxes
 - Preserves flags and timestamps
 - Deduplication using Message-ID
 - Safety mode with verification before deletion
 - Marks migrated emails as unread in destination
 - Retry mechanisms with exponential backoff
+
+### IMAP to Gmail (`imap_to_gmail`)
+IMAP-to-Gmail migration tool using Gmail API for optimal performance:
+- Reads emails from any IMAP server
+- Imports to Gmail using Gmail API (not IMAP)
+- OAuth2 authentication for enhanced security
+- Better metadata preservation than IMAP
+- Native Gmail label support
+- Deduplication using Message-ID
+- Safety mode with verification before deletion
+- Retry mechanisms with exponential backoff
+
+**When to use which:**
+- Use `email_move` for IMAP-to-IMAP migrations (non-Gmail destinations)
+- Use `imap_to_gmail` for migrating to Gmail/Google Workspace (better performance)
 
 ## Quick Start
 
@@ -173,6 +188,50 @@ options:
   retry_backoff_sec: 2.0
 ```
 
+### IMAP to Gmail Configuration
+
+For detailed setup instructions, see `imap_to_gmail/USAGE.md`.
+
+**Prerequisites:**
+1. Install dependencies: `pip install google-auth-oauthlib google-auth-httplib2 google-api-python-client`
+2. Set up OAuth2 credentials from Google Cloud Console
+3. Download `credentials.json` from Google Cloud Console
+
+**Quick Start:**
+```bash
+cd imap_to_gmail
+cp config.yaml.template config.yaml
+# Edit config.yaml with your IMAP server details
+python quickstart.py  # Interactive setup and first run
+```
+
+**Configuration Example:**
+```yaml
+source:
+  host: imap.source.com
+  port: 993
+  username: source@example.com
+  password: source_password
+  ssl: true
+  mailbox: INBOX
+
+gmail:
+  credentials_file: credentials.json
+  token_file: token.json
+  user_id: me
+
+options:
+  search_query: ALL
+  batch_size: 100
+  dedupe_by: message_id
+  delete_after_import: false
+  safety_mode: true
+  gmail_labels: []
+  mark_as_unread: true
+  max_retries: 3
+  retry_backoff_sec: 2.0
+```
+
 ## API Endpoints
 
 - `GET /` - Main dashboard
@@ -206,9 +265,20 @@ regular_tasks/
 │   ├── index.html
 │   ├── add_job.html
 │   └── logs.html
-├── email_move/           # Email migration module
+├── email_move/           # IMAP-to-IMAP migration module
 │   ├── run.py
 │   └── config.yaml
+├── imap_to_gmail/        # IMAP-to-Gmail migration module
+│   ├── run.py
+│   ├── config.yaml
+│   ├── credentials.json  # OAuth2 credentials (download from Google)
+│   ├── token.json        # OAuth2 token (auto-generated)
+│   ├── quickstart.py     # Interactive setup script
+│   ├── test_setup.py     # Configuration test script
+│   ├── integration.py    # Scheduler integration example
+│   ├── README.md         # Module documentation
+│   └── USAGE.md          # Detailed usage guide
+├── log/                  # Job execution logs
 └── data/                 # Persistent data directory
 ```
 

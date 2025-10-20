@@ -1,0 +1,88 @@
+# IMAP to Gmail Import Configuration Template
+# Copy this to config.yaml and fill in your details
+
+# Source IMAP server configuration
+source:
+  host: imap.example.com        # IMAP server hostname
+  port: 993                      # Port (993 for SSL, 143 for non-SSL)
+  username: user@example.com     # Your IMAP username/email
+  password: your_password_here   # Your IMAP password
+  ssl: true                      # Use SSL/TLS connection
+  starttls: false               # Use STARTTLS (usually false if ssl is true)
+  ssl_verify: true              # Verify SSL certificates (recommended)
+  mailbox: INBOX                # Source mailbox to read from
+
+# Gmail API configuration
+gmail:
+  credentials_file: credentials.json  # OAuth2 credentials from Google Cloud Console
+  token_file: token.json             # Where to store the OAuth2 token (auto-generated)
+  user_id: me                        # 'me' represents the authenticated user
+
+# Import options
+options:
+  # Search and filtering
+  search_query: ALL              # IMAP search query (ALL, UNSEEN, etc.)
+                                # Examples:
+                                # - ALL: all messages
+                                # - UNSEEN: unread messages only
+                                # - ["SINCE", "01-Jan-2024"]: messages since date
+                                # - ["FROM", "sender@example.com"]: from specific sender
+  
+  # Performance settings
+  batch_size: 100                # Number of messages to process per batch
+  idle_delay_sec: 0             # Delay between messages (0 = no delay)
+  
+  # Deduplication
+  dedupe_by: message_id         # Deduplication method:
+                                # - message_id: skip duplicates based on Message-ID header
+                                # - none: import all messages (may create duplicates)
+  
+  # Move/Delete options
+  delete_after_import: false    # Delete messages from source after import
+                                # WARNING: Set to true only if you want to MOVE emails
+  safety_mode: true             # Verify on Gmail before deleting from source
+                                # STRONGLY RECOMMENDED if delete_after_import is true
+  
+  # Retry settings
+  max_retries: 3                # Maximum retry attempts for failed operations
+  retry_backoff_sec: 2.0        # Initial backoff time (doubles each retry)
+  
+  # Gmail-specific options
+  gmail_labels: []              # Labels to apply to imported messages
+                                # Example: ['Archive', 'Migration', 'Important']
+                                # Leave empty [] for no labels
+  
+  mark_as_unread: true         # Import messages as unread
+                                # true: all imported messages are unread
+                                # false: preserve original read/unread status
+
+# ==============================================================================
+# Common Configuration Examples
+# ==============================================================================
+
+# Example 1: Import all unread messages, keep them on source
+# options:
+#   search_query: UNSEEN
+#   delete_after_import: false
+#   mark_as_unread: true
+
+# Example 2: Move all messages from 2024, mark as archived
+# options:
+#   search_query: ["SINCE", "01-Jan-2024"]
+#   delete_after_import: true
+#   safety_mode: true
+#   gmail_labels: ['Archive', 'Migration-2024']
+
+# Example 3: Import from specific sender
+# options:
+#   search_query: ["FROM", "sender@example.com"]
+#   delete_after_import: false
+#   gmail_labels: ['Important']
+
+# Example 4: Full migration (move everything)
+# options:
+#   search_query: ALL
+#   delete_after_import: true
+#   safety_mode: true
+#   batch_size: 50
+#   dedupe_by: message_id
