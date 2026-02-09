@@ -1,0 +1,36 @@
+webdav:
+  url: https://your-webdav-server.com/remote.php/dav/files/username/
+  username: your_username
+  password: your_password_here
+  folder: Notes  # Folder containing the PDF files (YYYY-MM.pdf)
+
+email:
+  smtp_host: smtp.gmail.com
+  smtp_port: 587
+  username: your_email@gmail.com
+  password: your_app_password_here  # Use app password for Gmail
+  from_addr: your_email@gmail.com
+  to_addr: your_email@gmail.com
+  subject: "New PDF Notes - {date}"  # {date} will be replaced with current month
+
+options:
+  temp_dir: /tmp/pdf_notes_extractor  # Directory to store temporary files
+  keep_previous_months: 2  # Number of previous months to keep in temp directory
+  include_current_month: true  # Whether to process current month's PDF
+  include_previous_month: true  # Whether to process previous month's PDF
+  
+  # PDF comparison settings
+  compare_method: md5  # md5 | pixel | both (method to detect page changes)
+  
+  # Email settings
+  attach_extracted_pdf: true  # Attach the extracted PDF to email
+  email_body_template: |
+    Hello,
+    
+    Attached are the new or modified pages from your PDF notes for {date}.
+    
+    Total pages extracted: {page_count}
+    Source files: {source_files}
+    
+    Best regards,
+    PDF Notes Extractor
