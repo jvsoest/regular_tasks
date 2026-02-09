@@ -52,7 +52,7 @@ def load_config(path: str) -> Dict[str, Any]:
     cfg.setdefault("options", {})
     
     o = cfg["options"]
-    o.setdefault("temp_dir", "/tmp/pdf_notes_extractor")
+    o.setdefault("temp_dir", "tmp/pdf_notes_extractor")
     o.setdefault("keep_previous_months", 2)
     o.setdefault("include_current_month", True)
     o.setdefault("include_previous_month", True)
@@ -119,10 +119,30 @@ def download_pdf_from_webdav(
     Returns True if successful, False otherwise.
     """
     try:
+        # Ensure parent directory exists
+        os.makedirs(os.path.dirname(local_path), exist_ok=True)
+        
+        # Check if file exists on WebDAV
+        if not client.check(remote_path):
+            print(f"File does not exist on WebDAV: {remote_path}")
+            return False
+        
+        print(f"  Remote file exists, downloading to: {local_path}")
         client.download_sync(remote_path=remote_path, local_path=local_path)
-        return True
+        
+        # Verify download succeeded
+        if os.path.exists(local_path):
+            file_size = os.path.getsize(local_path)
+            print(f"  Downloaded successfully ({file_size} bytes)")
+            return True
+        else:
+            print(f"  Download failed - file not created")
+            return False
+            
     except Exception as e:
         print(f"Failed to download {remote_path}: {e}")
+        import traceback
+        traceback.print_exc()
         return False
 
 
@@ -341,6 +361,11 @@ def main(config_path: str = None):
     
     # Setup directories
     temp_dir = config["options"]["temp_dir"]
+    # Convert to absolute path if relative
+    if not os.path.isabs(temp_dir):
+        # Make it relative to the config file's directory
+        config_dir = os.path.dirname(os.path.abspath(config_path))
+        temp_dir = os.path.join(config_dir, temp_dir)
     os.makedirs(temp_dir, exist_ok=True)
     
     # Setup WebDAV client
@@ -360,6 +385,10 @@ def main(config_path: str = None):
     # Download PDFs from WebDAV
     webdav_folder = config["webdav"].get("folder", "")
     downloaded_files = []
+    
+    print(f"\nTemp directory: {temp_dir}")
+    print(f"WebDAV folder: {webdav_folder}")
+    print(f"Files to process: {len(files_to_process)}\n")
     
     for filename, month_str in files_to_process:
         remote_path = f"{webdav_folder}/{filename}" if webdav_folder else filename
@@ -390,11 +419,12 @@ def main(config_path: str = None):
             config["options"]["compare_method"]
         )
         
-        if changed_pages:
-            all_changed_pages.append((current_pdf, changed_pages, month_str))
-        
         # Replace old version with new version
         shutil.move(current_pdf, previous_pdf)
+        
+        # Store the final path (after move) with changed pages
+        if changed_pages:
+            all_changed_pages.append((previous_pdf, changed_pages, month_str))
     
     # Extract changed pages to a single PDF
     if all_changed_pages:

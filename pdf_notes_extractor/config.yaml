@@ -14,7 +14,7 @@ email:
   subject: "New PDF Notes - {date}"  # {date} will be replaced with current month
 
 options:
-  temp_dir: /tmp/pdf_notes_extractor  # Directory to store temporary files
+  temp_dir: tmp/pdf_notes_extractor  # Directory to store temporary files
   keep_previous_months: 2  # Number of previous months to keep in temp directory
   include_current_month: true  # Whether to process current month's PDF
   include_previous_month: true  # Whether to process previous month's PDF
