@@ -148,7 +148,8 @@ def download_pdf_from_webdav(
 
 def get_pdf_page_hash(pdf_path: str, page_num: int) -> Optional[str]:
     """
-    Get MD5 hash of a specific page in a PDF.
+    Get MD5 hash of a specific page in a PDF based on extracted text and annotation content.
+    This is more stable than binary content streams which can change on re-encoding.
     Returns None if page cannot be read.
     """
     try:
@@ -158,16 +159,56 @@ def get_pdf_page_hash(pdf_path: str, page_num: int) -> Optional[str]:
                 return None
             
             page = reader.pages[page_num]
-            # Extract page content and compute hash
-            content = page.extract_text()
-            
-            # Also include page object data for more accurate comparison
-            page_obj = page.get_object()
-            page_data = str(page_obj).encode('utf-8')
             
             hash_obj = hashlib.md5()
-            hash_obj.update(content.encode('utf-8'))
-            hash_obj.update(page_data)
+            
+            # Extract and hash the text content
+            try:
+                text_content = page.extract_text()
+                if text_content:
+                    hash_obj.update(text_content.encode('utf-8'))
+            except Exception as e:
+                print(f"  Warning: Could not extract text from page {page_num}: {e}")
+            
+            # Include annotations (handwritten notes, highlights, comments, etc.)
+            # Hash only the stable parts
+            if '/Annots' in page:
+                annots = page['/Annots']
+                if hasattr(annots, 'get_object'):
+                    annots = annots.get_object()
+                
+                # Collect annotation data in a stable way
+                annot_data = []
+                if isinstance(annots, list):
+                    for annot in annots:
+                        if hasattr(annot, 'get_object'):
+                            annot_obj = annot.get_object()
+                            # Extract only stable annotation properties
+                            stable_props = {}
+                            for key in ['/Subtype', '/Contents', '/Rect', '/C', '/CA', 
+                                       '/T', '/QuadPoints', '/InkList']:
+                                if key in annot_obj:
+                                    val = annot_obj[key]
+                                    stable_props[key] = str(val)
+                            
+                            # For ink annotations, also get the appearance stream if available
+                            if '/AP' in annot_obj:
+                                ap = annot_obj['/AP']
+                                if hasattr(ap, 'get_object'):
+                                    ap_obj = ap.get_object()
+                                    if '/N' in ap_obj:
+                                        n_obj = ap_obj['/N']
+                                        if hasattr(n_obj, 'get_object'):
+                                            n = n_obj.get_object()
+                                            # Try to get the stream data
+                                            if hasattr(n, 'get_data'):
+                                                stable_props['/AP_DATA'] = str(len(n.get_data()))
+                            
+                            annot_data.append(str(sorted(stable_props.items())))
+                
+                # Hash the sorted annotation data for consistency
+                for data in sorted(annot_data):
+                    hash_obj.update(data.encode('utf-8'))
             
             return hash_obj.hexdigest()
     except Exception as e:
@@ -211,6 +252,7 @@ def compare_pdfs(old_pdf: str, new_pdf: str, method: str = "md5") -> Set[int]:
                     # If page number exceeds old PDF, it's a new page
                     if page_num >= old_page_count:
                         changed_pages.add(page_num)
+                        print(f"  Page {page_num + 1}: NEW (exceeds old PDF)")
                         continue
                     
                     # Compare page hashes
@@ -219,6 +261,9 @@ def compare_pdfs(old_pdf: str, new_pdf: str, method: str = "md5") -> Set[int]:
                     
                     if old_hash != new_hash:
                         changed_pages.add(page_num)
+                        print(f"  Page {page_num + 1}: CHANGED (old={old_hash[:8]}... new={new_hash[:8]}...)")
+                    else:
+                        print(f"  Page {page_num + 1}: unchanged")
                 
                 print(f"Found {len(changed_pages)} changed/new pages")
                 
