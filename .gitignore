@@ -17,3 +17,9 @@ token.json
 # Sensitive config files with passwords
 email_move/config.yaml
 imap_to_gmail/config.yaml
+pdf_notes_extractor/config.yaml
+
+imap_to_gmail/
+
+# Temporary files
+tmp/
